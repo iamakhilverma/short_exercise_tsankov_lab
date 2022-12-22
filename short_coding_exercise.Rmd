@@ -18,6 +18,86 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+# Libraries
+
+## Installations
+
+```{r}
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# 
+# BiocManager::install("GEOquery")
+
+
+```
+
+## Loading
+
+```{r warning=FALSE, message=FALSE}
+# library(Seurat)
+library(dplyr)
+library(patchwork)
+
+library(GEOquery)
+
+library(R.utils)
+```
+
+# Data retrieval
+
+```{r}
+setwd("/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab")
+getwd()
+```
+
+
+GEO accession: `GSE125449`
+A total of 19 tumors were profiled. Set 1 contains scRNA-seq data of twelve samples, i.e., S16_P10_LCP18, S02_P01_LCP21, S10_P05_LCP23, S09_P04_LCP25, S08_P03_LCP26, S07_P02_LCP28, S11_P06_LCP29, S12_P07_LCP30, S20_P12_LCP35, S21_P13_LCP37, S15_P09_LCP38, and S19_P11_LCP39. Set 2 includes scRNA-seq data of seven samples, i.e., S351_P10_LCP34, S355_P13_LCP42, S358_P16_LCP46, S305_P06_LCP56, S300_P02_LCP60, 364_P21_LCP65, and S365_P22_LCP66. Detailed information can be found in samples.txt file of each Set.
+
+`GPL18573`	Illumina NextSeq 500 (Homo sapiens)
+`GPL20301`	Illumina HiSeq 4000 (Homo sapiens)
+
+We care about the data contained in Set 1, i.e., `GSE125449-GPL18573_series_matrix.txt.gz`.
+
+```{r}
+# gse <- getGEO('GSE125449',GSEMatrix=TRUE)
+# show(gse)
+```
+```{r}
+# options(timeout = max(300, getOption("timeout")))
+# options(download.file.method.GEOquery = "wget")
+```
+
+```{r}
+if (!(file.exists("/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/"))){
+  filePaths <- getGEOSuppFiles('GSE125449')
+  filePaths
+}
+```
+```{r}
+unzipper <- function(filename) {
+  gunzip(filename, destname=paste(
+  '/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/gse125449_set1/',
+  gsub("^GSE125449_Set1_", "", tail(strsplit(gsub("[.]gz$", "", filename), '/')[[1]], n=1)),
+  sep=''
+), remove=FALSE)
+}
+```
+
+
+```{r}
+if (!(file.exists("/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/gse125449_set1"))){
+  filenames <- list.files(path="/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/", pattern="GSE125449_Set1_[A-Za-z0-9.]+.gz", full.names=TRUE)
+  filenames
+  sapply(filenames, unzipper)
+}
+```
+
+```{r}
+# livcan.data <- 
+```
+
+
 # R Markdown
 
 For Markdown setup options, see <https://bookdown.org/yihui/rmarkdown/html-document.html>. 
@@ -39,3 +119,11 @@ plot(pressure)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+# Session Information
+
+```{r}
+sessionInfo(package=NULL)
+```
+
