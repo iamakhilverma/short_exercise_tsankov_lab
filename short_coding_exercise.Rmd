@@ -28,19 +28,20 @@ knitr::opts_chunk$set(echo = TRUE)
 # 
 # BiocManager::install("GEOquery")
 
+# install.packages(c("R.utils", "Seurat", "dplyr", "patchwork"))
 
 ```
 
 ## Loading
 
 ```{r warning=FALSE, message=FALSE}
-# library(Seurat)
-library(dplyr)
-library(patchwork)
-
 library(GEOquery)
 
 library(R.utils)
+
+library(Seurat)
+library(dplyr)
+library(patchwork)
 ```
 
 # Data retrieval
@@ -64,7 +65,7 @@ We care about the data contained in Set 1, i.e., `GSE125449-GPL18573_series_matr
 # show(gse)
 ```
 ```{r}
-# options(timeout = max(300, getOption("timeout")))
+options(timeout = max(300, getOption("timeout")))
 # options(download.file.method.GEOquery = "wget")
 ```
 
@@ -93,9 +94,93 @@ if (!(file.exists("/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE12
 }
 ```
 
+The MTX format is a sparse matrix format with genes on the rows and cells on the columns as output by Cell Ranger. You should also have TSV files with genes and barcode sequences corresponding to row and column indices, respectively. These files must be located in the same folder as the MTX file with the same base file name. For example if the MTX file is my_data.mtx, you should also have a my_data.genes.txt file and a my_data.barcodes.txt file.
+
+
 ```{r}
-# livcan.data <- 
+# Load the liver cancer set 1 dataset
+livcan.data <- Read10X(data.dir = "./GSE125449/gse125449_set1/")
+dim(livcan.data)
+# Genes were retained with detected expression in more than 0.1% of all the cells (Total cells in our matrix was 5115, hence 0.1% of 5115 is 511.5). Cells with less than 500 detected genes were excluded.
+livcan <- CreateSeuratObject(counts = livcan.data, project = "livcan_set1", min.cells = 511, min.features = 500)
+dim(livcan)
+# head(livcan.data)
 ```
+"A total of 5,115 cells passed the initial quality control."
+Indeed.
+
+# Preprocessing
+
+## QC and selecting cells for further analysis
+
+"We also performed additional quality control steps including choosing the minimum UMI counts (> 700), removing doublets (0.4%, according to the multiplet rate provided by 10x Genomics based on the number of cells loaded and recovered), filtering cells with the percentage of mitochondrial genes (> 20%) (Vento-Tormo et al., 2018)."
+
+NOTE: The pattern provided (“^MT-“) works for human gene names. You may need to adjust depending on your organism of interest. If you weren’t using gene names as the gene ID, then this function wouldn’t work. 
+
+```{r}
+# Show QC metrics for the first 5 cells
+head(livcan@meta.data, 5)
+livcan[["percent.mt"]] <- PercentageFeatureSet(livcan, pattern = "^MT-")
+head(livcan@meta.data, 5)
+
+
+# Visualize QC metrics as a violin plot
+VlnPlot(livcan, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+- nFeature_RNA is the number of genes detected in each cell
+- nCount_RNA is the total number of molecules (UMIs) detected within a cell
+
+Low nFeature_RNA for a cell indicates that it may be dead/dying or an empty droplet. High nCount_RNA and/or nFeature_RNA indicates that the "cell" may in fact be a doublet (or multiplet).
+
+```{r}
+dim(livcan)
+# livcan <- subset(livcan, subset = nCount_RNA > 700 & percent.mt < 20)
+livcan <- subset(
+  livcan, 
+  subset = (nCount_RNA > 700) & 
+    (nFeature_RNA < 2500) & 
+    (percent.mt < 20)
+)
+dim(livcan)
+```
+
+"We found that additional filtering steps did not change an overall cellular composition among these samples."
+In our case, No. of cells passing the quality control dropped from 5115 to 4321!
+
+I added the nFeature_RNA cutoffs to take care of any empty droplets or doublets or multiplets. Also, instead of the standard `nFeature_RNA > 200 & nFeature_RNA < 2500`, I used only `nFeature_RNA < 2500` as we only have cells with at least 500 genes in them because of a previous filtration step.
+Even if I wouldn't have added the nFeature_RNA cutoffs, the no. of cells passing the quality control was ~4700.
+
+More on doublet detection and removal can be found on- 
+1. http://bioconductor.org/books/3.16/OSCA.advanced/doublet-detection.html
+2. https://nbisweden.github.io/workshop-scRNAseq/labs/compiled/seurat/seurat_01_qc.html#Predict_doublets
+
+
+## Normalizing the data
+
+lorem ipsum dolor sit amet
+
+```{r}
+# lorem ipsum dolor sit amet
+```
+
+## Identification of highly variable features (feature selection)
+
+lorem ipsum dolor sit amet
+
+```{r}
+# lorem ipsum dolor sit amet
+```
+
+
+## Scaling the data
+
+lorem ipsum dolor sit amet
+
+```{r}
+# lorem ipsum dolor sit amet
+```
+
 
 
 # R Markdown
