@@ -42,6 +42,7 @@ library(R.utils)
 library(Seurat)
 library(dplyr)
 library(patchwork)
+# library(scCustomize)
 ```
 
 # Data retrieval
@@ -122,10 +123,12 @@ dim(livcan.data)
 livcan <-
   CreateSeuratObject(
     counts = livcan.data,
-    project = "livcan_set1",
     # min.cells = 511,
     min.cells = 6,
-    min.features = 500
+    min.features = 500,
+    project = "livcan_set1",
+    names.delim = "-",
+    names.field = 2
   )
 dim(livcan)
 # head(livcan.data)
@@ -138,6 +141,9 @@ Indeed.
 ## QC and selecting cells for further analysis
 
 "We also performed additional quality control steps including choosing the minimum UMI counts (> 700), removing doublets (0.4%, according to the multiplet rate provided by 10x Genomics based on the number of cells loaded and recovered), filtering cells with the percentage of mitochondrial genes (> 20%) (Vento-Tormo et al., 2018)."
+
+Mitochondrial genes can be used to identify low-quality cells. In cells which are broken, cytoplasmic RNA is diluted and RNA which is enclosed in the mitochondria will be retained (Ilicic T. et al. 2016 Classification of low quality cells from single-cell RNA-seq data. Genome Biol.).
+Mitochondrial genes starts with prefix “MT-”.
 
 NOTE: The pattern provided (“^MT-“) works for human gene names. You may need to adjust depending on your organism of interest. If you weren’t using gene names as the gene ID, then this function wouldn’t work. 
 
@@ -312,7 +318,7 @@ JackStrawPlot(livcan, dims = 1:50)
 
 # Cluster the cells
 
-lorem ipsum dolor sit amet
+Seurat uses a graph-based technique to cluster cells based on their gene expression profiles.
 
 ```{r}
 livcan <- FindNeighbors(livcan, dims = 1:20)
@@ -325,21 +331,59 @@ head(Idents(livcan), 5)
 
 # Non-linear dimensional reduction
 
-The first 20 PCs were applied for t-SNE analysis according to the eigenvalues (data not shown). 
+The first 20 PCs were applied for t-SNE analysis according to the eigenvalues (data not shown).
+
+The order is taken from Table 1 from <https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE125449> and PMID: 31588021:
+  GSM4050085	S16_P10_LCP18  Patient no.  1  H18
+  GSM4050086	S02_P01_LCP21  Patient no.  2  H21
+  GSM4050087	S10_P05_LCP23  Patient no.  3  H23
+  GSM4050088	S09_P04_LCP25  Patient no.  4  C25
+  GSM4050089	S08_P03_LCP26  Patient no.  5  C26
+  GSM4050090	S07_P02_LCP28  Patient no.  6  H28
+  GSM4050091	S11_P06_LCP29  Patient no.  7  C29
+  GSM4050092	S12_P07_LCP30  Patient no.  8  H30
+  GSM4050093	S20_P12_LCP35  Patient no.  9  C35
+  GSM4050094	S21_P13_LCP37  Patient no. 10  H37
+  GSM4050095	S15_P09_LCP38  Patient no. 11  H38
+  GSM4050096	S19_P11_LCP39  Patient no. 12  C39
 
 ```{r}
 livcan <- RunTSNE(livcan, dims = 1:20)
-DimPlot(livcan, reduction = "tsne", label = TRUE)
+DimPlot(
+  livcan,
+  reduction = "tsne",
+  label = FALSE,
+  group.by = "orig.ident",
+  shuffle = TRUE,
+  seed = 100,
+  order = c(11, 9, 13, 12, 7, 6, 2, 3, 4, 5, 1, 10),
+  # order = c(13, 12, 11, 10, 9, 7, 6, 5, 4, 3, 2, 1),
+  # cols = DiscretePalette(12, palette = "alphabet2")
+  cols = DiscretePalette(12, palette = "glasbey")
+)
 # DimPlot(livcan, reduction = "tsne")
 
+
+# DimPlot(
+#   livcan,
+#   reduction = "tsne",
+#   label = FALSE,
+#   group.by = "ident",
+#   split.by = "orig.ident",
+#   ncol = 4,
+#   # order = c(11, 9, 13, 12, 7, 6, 2, 3, 4, 5, 1, 10),
+#   # combine = TRUE,
+#   cols = DiscretePalette(12, palette = "alphabet2")
+#   # cols = DiscretePalette(12)
+# )
 # # By default Seurat’s DimPlot() plots each group on top of the next which can make plots harder to interpret. DimPlot_scCustom sets shuffle = TRUE by default as I believe this setting is more often the visualization that provides the most clarity.
 # # https://samuel-marsh.github.io/scCustomize/articles/Gene_Expression_Plotting.html
 # DimPlot(seurat_object = marsh_human_pm, group.by = "sample_id")
-# DimPlot_scCustom(seurat_object = marsh_human_pm, group.by = "sample_id")
+# DimPlot_scCustom(seurat_object = livcan, group.by = "orig.ident")
 ```
 
 ```{r}
-livcan@meta.data
+head(livcan@meta.data)
 ```
 
 
