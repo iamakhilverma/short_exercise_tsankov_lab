@@ -25,7 +25,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 # if (!require("BiocManager", quietly = TRUE))
 #     install.packages("BiocManager")
-# 
+#
 # BiocManager::install("GEOquery")
 
 # install.packages(c("R.utils", "Seurat", "dplyr", "patchwork"))
@@ -70,25 +70,42 @@ options(timeout = max(300, getOption("timeout")))
 ```
 
 ```{r}
-if (!(file.exists("/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/"))){
+if (!(
+  file.exists(
+    "/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/"
+  )
+)) {
   filePaths <- getGEOSuppFiles('GSE125449')
   filePaths
 }
 ```
 ```{r}
 unzipper <- function(filename) {
-  gunzip(filename, destname=paste(
-  '/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/gse125449_set1/',
-  gsub("^GSE125449_Set1_", "", tail(strsplit(gsub("[.]gz$", "", filename), '/')[[1]], n=1)),
-  sep=''
-), remove=FALSE)
+  gunzip(
+    filename,
+    destname = paste(
+      '/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/gse125449_set1/',
+      gsub("^GSE125449_Set1_", "", tail(strsplit(
+        gsub("[.]gz$", "", filename), '/'
+      )[[1]], n = 1)),
+      sep = ''
+    ),
+    remove = FALSE
+  )
 }
 ```
 
 
 ```{r}
-if (!(file.exists("/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/gse125449_set1"))){
-  filenames <- list.files(path="/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/", pattern="GSE125449_Set1_[A-Za-z0-9.]+.gz", full.names=TRUE)
+if (!(
+  file.exists(
+    "/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/gse125449_set1"
+  )
+)) {
+  filenames <-
+    list.files(path = "/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/",
+               pattern = "GSE125449_Set1_[A-Za-z0-9.]+.gz",
+               full.names = TRUE)
   filenames
   sapply(filenames, unzipper)
 }
@@ -102,7 +119,14 @@ The MTX format is a sparse matrix format with genes on the rows and cells on the
 livcan.data <- Read10X(data.dir = "./GSE125449/gse125449_set1/")
 dim(livcan.data)
 # Genes were retained with detected expression in more than 0.1% of all the cells (Total cells in our matrix was 5115, hence 0.1% of 5115 is 511.5). Cells with less than 500 detected genes were excluded.
-livcan <- CreateSeuratObject(counts = livcan.data, project = "livcan_set1", min.cells = 511, min.features = 500)
+livcan <-
+  CreateSeuratObject(
+    counts = livcan.data,
+    project = "livcan_set1",
+    # min.cells = 511,
+    min.cells = 6,
+    min.features = 500
+  )
 dim(livcan)
 # head(livcan.data)
 ```
@@ -120,12 +144,17 @@ NOTE: The pattern provided (“^MT-“) works for human gene names. You may need
 ```{r}
 # Show QC metrics for the first 5 cells
 head(livcan@meta.data, 5)
-livcan[["percent.mt"]] <- PercentageFeatureSet(livcan, pattern = "^MT-")
+livcan[["percent.mt"]] <-
+  PercentageFeatureSet(livcan, pattern = "^MT-")
 head(livcan@meta.data, 5)
 
 
 # Visualize QC metrics as a violin plot
-VlnPlot(livcan, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+VlnPlot(
+  livcan,
+  features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
+  ncol = 3
+)
 ```
 
 - nFeature_RNA is the number of genes detected in each cell
@@ -136,12 +165,10 @@ Low nFeature_RNA for a cell indicates that it may be dead/dying or an empty drop
 ```{r}
 dim(livcan)
 # livcan <- subset(livcan, subset = nCount_RNA > 700 & percent.mt < 20)
-livcan <- subset(
-  livcan, 
-  subset = (nCount_RNA > 700) & 
-    (nFeature_RNA < 2500) & 
-    (percent.mt < 20)
-)
+livcan <- subset(livcan,
+                 subset = (nCount_RNA > 700) &
+                   # (nFeature_RNA < 2500) &
+                   (percent.mt < 20))
 dim(livcan)
 ```
 
@@ -158,29 +185,162 @@ More on doublet detection and removal can be found on-
 
 ## Normalizing the data
 
-lorem ipsum dolor sit amet
+"The total number of transcripts in each single-cell was normalized to 10,000, followed by log transformation, i.e., NormalizedExp = log (RawExp/TotalExp * 10000+1), where RawExp, NormalizedExp and TotalExp represent the raw gene expression value, normalized gene expression as well as the total expression of all genes in a single-cell, respectively."
+
+This step is just using the default scaling factor of 10,000 in the "LogNormalize" global-scaling normalization method.
 
 ```{r}
-# lorem ipsum dolor sit amet
+dim(livcan)
+livcan <-
+  NormalizeData(livcan,
+                normalization.method = "LogNormalize",
+                scale.factor = 10000)
+# # Same can be achieved with the following as we're just using the default values
+# livcan <- NormalizeData(livcan)
+dim(livcan)
 ```
 
 ## Identification of highly variable features (feature selection)
 
-lorem ipsum dolor sit amet
+We next calculate a subset of features that exhibit high cell-to-cell variation in the dataset (i.e, they are highly expressed in some cells, and lowly expressed in others). Researchers have found that focusing on these genes in downstream analysis helps to highlight biological signal in single-cell datasets.
+
+"Highly variable genes (k = 2,244) were detected according to average expression (between 0.05 to 3) and dispersion (above 0.5) of the genes, followed by data scaling (subtracting the average expression) and centering (divided by standard deviation)."
+
+More on FindVariableFeatures()- https://satijalab.org/seurat/reference/findvariablefeatures
 
 ```{r}
-# lorem ipsum dolor sit amet
-```
+dim(livcan)
 
+livcan <- FindVariableFeatures(
+  livcan,
+  selection.method = "mvp",
+  mean.cutoff = c(0.05, 3),
+  dispersion.cutoff = c(0.5, Inf),
+  verbose = TRUE
+)
+
+dim(livcan)
+
+# Identify the 10 most highly variable genes
+top10_hvg <- head(VariableFeatures(livcan), 10)
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(livcan)
+plot2 <- LabelPoints(plot = plot1,
+                     points = top10_hvg,
+                     repel = TRUE)
+plot1 + plot2
+```
+With the stringent cutoffs, only 1086 genes were classified as HVGs out of 5124, i.e., 4038 non-variable genes.
+
+So, maybe they've used only the cutoffs mentioned in their methods. After using only those cutoffs, I got 2240 HVGs compared to their 2244 HVGs.
 
 ## Scaling the data
 
+"...data scaling (subtracting the average expression) and centering (divided by standard deviation)"
+
+Setting center to TRUE will center the expression for each feature by subtracting the average expression for that feature. Setting scale to TRUE will scale the expression level for each feature by dividing the centered feature expression levels by their standard deviations if center is TRUE and by their root mean square otherwise.
+
+More on ScaleData()- https://satijalab.org/seurat/reference/scaledata
+
+```{r}
+all.genes <- rownames(livcan)
+
+livcan <-
+  ScaleData(
+    livcan,
+    do.center = TRUE,
+    do.scale = TRUE,
+    features = all.genes, 
+    verbose = TRUE
+  )
+```
+
+# Linear dimensional reduction
+
+"Those variable genes were considered accounting for cell-to-cell differences, and were further used for PCA."
+
+Now to perform PCA on the scaled data- By default, only the previously determined variable features are used as input, but can be defined using features argument if we wish to choose a different subset.
+
+```{r}
+length(VariableFeatures(object = livcan))
+livcan <-
+  RunPCA(livcan, features = VariableFeatures(object = livcan))
+# Same can be achieved with livcan <- RunPCA(livcan) as it picks-up HVGs by default
+# npcs, i.e.,Total Number of PCs to compute and store (50 by default)
+```
+
+Some different ways to visualize cells and features that define the PCA-
+
+```{r}
+# Way 1
+print(livcan[["pca"]], dims = 1:5, nfeatures = 5)
+
+# Way2
+VizDimLoadings(livcan, dims = 1:2, reduction = "pca")
+
+# Way3
+DimPlot(livcan, reduction = "pca")
+
+# Way4
+DimHeatmap(livcan, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(livcan, dims = 1:20, cells = 500, balanced = TRUE)
+```
+
+# Determining the "dimensionality" of the dataset
+
+‘Elbow plot’: a ranking of principle components based on the percentage of variance explained by each one (ElbowPlot() function). 
+
+```{r}
+ElbowPlot(livcan, ndims=20)
+ElbowPlot(livcan, ndims=50)
+```
+
+- From the Elbow plot with 20 dims, we can observe an ‘elbow’ around PC19-20, suggesting that the majority of true signal is captured in the first 20 PCs.
+- From the Elbow plot with 50 dims, we can observe an ‘elbow’ around PC44-45, suggesting that the majority of true signal is captured in the first 45 PCs.
+
+
+An alternate approach would be to use JackStrawPlot().
+
+```{r}
+livcan <- JackStraw(livcan, num.replicate = 100, dims = 50, verbose = TRUE)
+livcan <- ScoreJackStraw(livcan, dims = 1:50)
+
+JackStrawPlot(livcan, dims = 1:50)
+```
+
+- From the JackStraw plot with 50 dims, it appears that there is a sharp drop-off in significance after the first 45 PCs (same can be said about a sharp drop-off about after 19 PCs or 26 PCs).
+
+# Cluster the cells
+
 lorem ipsum dolor sit amet
 
 ```{r}
-# lorem ipsum dolor sit amet
+livcan <- FindNeighbors(livcan, dims = 1:20)
+livcan <- FindClusters(livcan, resolution = 0.325)
+
+# Look at cluster IDs of the first 5 cells
+head(Idents(livcan), 5)
 ```
 
+
+# Non-linear dimensional reduction
+
+The first 20 PCs were applied for t-SNE analysis according to the eigenvalues (data not shown). 
+
+```{r}
+livcan <- RunTSNE(livcan, dims = 1:20)
+DimPlot(livcan, reduction = "tsne", label = TRUE)
+# DimPlot(livcan, reduction = "tsne")
+
+# # By default Seurat’s DimPlot() plots each group on top of the next which can make plots harder to interpret. DimPlot_scCustom sets shuffle = TRUE by default as I believe this setting is more often the visualization that provides the most clarity.
+# # https://samuel-marsh.github.io/scCustomize/articles/Gene_Expression_Plotting.html
+# DimPlot(seurat_object = marsh_human_pm, group.by = "sample_id")
+# DimPlot_scCustom(seurat_object = marsh_human_pm, group.by = "sample_id")
+```
+
+```{r}
+livcan@meta.data
+```
 
 
 # R Markdown
