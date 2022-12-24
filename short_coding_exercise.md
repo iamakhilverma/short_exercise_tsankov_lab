@@ -1,7 +1,7 @@
 ---
 title: "short_coding_exercise"
 author: "Akhil Kumar"
-date: "2022-12-24"
+date: "2022-12-25"
 output: 
   html_document:
     code_folding: hide
@@ -23,10 +23,11 @@ output:
 
 ```r
 # if (!require("BiocManager", quietly = TRUE))
-#     install.packages("BiocManager")
-#
+#   install.packages("BiocManager")
+# 
 # BiocManager::install("GEOquery")
-
+# BiocManager::install("dittoSeq")
+# 
 # install.packages(c("R.utils", "Seurat", "dplyr", "patchwork"))
 ```
 
@@ -37,11 +38,15 @@ output:
 library(GEOquery)
 
 library(R.utils)
+library(data.table)
+library(ggplot2)
+library(ggthemes)
 
 library(Seurat)
 library(dplyr)
 library(patchwork)
 # library(scCustomize)
+# library(dittoSeq)
 ```
 
 # Data retrieval
@@ -165,8 +170,151 @@ dim(livcan)
 ```r
 # head(livcan.data)
 ```
+
+
 "A total of 5,115 cells passed the initial quality control."
 Indeed.
+
+
+The order is taken from Table 1 from <https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE125449> and PMID: 31588021:
+  GSM4050085	S16_P10_LCP18  Patient no.  1  H18
+  GSM4050086	S02_P01_LCP21  Patient no.  2  H21
+  GSM4050087	S10_P05_LCP23  Patient no.  3  H23
+  GSM4050088	S09_P04_LCP25  Patient no.  4  C25
+  GSM4050089	S08_P03_LCP26  Patient no.  5  C26
+  GSM4050090	S07_P02_LCP28  Patient no.  6  H28
+  GSM4050091	S11_P06_LCP29  Patient no.  7  C29
+  GSM4050092	S12_P07_LCP30  Patient no.  8  H30
+  GSM4050093	S20_P12_LCP35  Patient no.  9  C35
+  GSM4050094	S21_P13_LCP37  Patient no. 10  H37
+  GSM4050095	S15_P09_LCP38  Patient no. 11  H38
+  GSM4050096	S19_P11_LCP39  Patient no. 12  C39
+
+
+```r
+v_orig_ident <- c(10, 1, 5, 4, 3, 2, 6, 7, 12, 13, 9, 11)
+v_patient_ids <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+v_sample_ids <-
+  c("H18",
+    "H21",
+    "H23",
+    "C25",
+    "C26",
+    "H28",
+    "C29",
+    "H30",
+    "C35",
+    "H37",
+    "H38",
+    "C39")
+```
+
+
+```r
+head(livcan@meta.data)
+```
+
+```
+##                    orig.ident nCount_RNA nFeature_RNA
+## AAACCTGAGGCGTACA-1          1       2235          909
+## AAACGGGAGATCGATA-1          1       3555         1266
+## AAAGCAAAGATCGGGT-1          1       7751         2495
+## AAATGCCGTCTCAACA-1          1       3168         1100
+## AACACGTCACGGCTAC-1          1       2040         1096
+## AACCGCGAGACGCTTT-1          1      10126         2864
+```
+
+```r
+livcan$patient_id <- NA
+livcan$sample_id <- NA
+head(livcan$sample_id)
+```
+
+```
+## AAACCTGAGGCGTACA-1 AAACGGGAGATCGATA-1 AAAGCAAAGATCGGGT-1 AAATGCCGTCTCAACA-1 
+##                 NA                 NA                 NA                 NA 
+## AACACGTCACGGCTAC-1 AACCGCGAGACGCTTT-1 
+##                 NA                 NA
+```
+
+```r
+for (i in seq.int(1, 12)) {
+  livcan$patient_id[livcan$orig.ident == v_orig_ident[i]] <-
+    v_patient_ids[i]
+  livcan$sample_id[livcan$orig.ident == v_orig_ident[i]] <-
+    v_sample_ids[i]
+}
+
+head(livcan@meta.data)
+```
+
+```
+##                    orig.ident nCount_RNA nFeature_RNA patient_id sample_id
+## AAACCTGAGGCGTACA-1          1       2235          909          2       H21
+## AAACGGGAGATCGATA-1          1       3555         1266          2       H21
+## AAAGCAAAGATCGGGT-1          1       7751         2495          2       H21
+## AAATGCCGTCTCAACA-1          1       3168         1100          2       H21
+## AACACGTCACGGCTAC-1          1       2040         1096          2       H21
+## AACCGCGAGACGCTTT-1          1      10126         2864          2       H21
+```
+
+```r
+head(livcan)
+```
+
+```
+##                    orig.ident nCount_RNA nFeature_RNA patient_id sample_id
+## AAACCTGAGGCGTACA-1          1       2235          909          2       H21
+## AAACGGGAGATCGATA-1          1       3555         1266          2       H21
+## AAAGCAAAGATCGGGT-1          1       7751         2495          2       H21
+## AAATGCCGTCTCAACA-1          1       3168         1100          2       H21
+## AACACGTCACGGCTAC-1          1       2040         1096          2       H21
+## AACCGCGAGACGCTTT-1          1      10126         2864          2       H21
+## AACCGCGGTGACCAAG-1          1       2720          804          2       H21
+## AACGTTGCATGCCACG-1          1       8063         2647          2       H21
+## AACTCAGAGGCTATCT-1          1      17798         1261          2       H21
+## AACTCCCAGCTCTCGG-1          1       5079         1649          2       H21
+```
+
+
+```r
+samples <-
+  read.table(
+    "./GSE125449/gse125449_set1/samples.txt",
+    header = TRUE,
+    sep = "\t",
+    col.names = c("sample_expt_str", "cell_barcode", "cell_type")
+  )
+head(samples)
+```
+
+```
+##   sample_expt_str       cell_barcode cell_type
+## 1   S02_P01_LCP21 AAACCTGAGGCGTACA-1       CAF
+## 2   S02_P01_LCP21 AAACGGGAGATCGATA-1       CAF
+## 3   S02_P01_LCP21 AAAGCAAAGATCGGGT-1       CAF
+## 4   S02_P01_LCP21 AAATGCCGTCTCAACA-1       CAF
+## 5   S02_P01_LCP21 AACACGTCACGGCTAC-1       TEC
+## 6   S02_P01_LCP21 AACCGCGAGACGCTTT-1       CAF
+```
+
+```r
+livcan$cell_barcode <- rownames(livcan@meta.data)
+all(livcan$cell_barcode == samples$cell_barcode)
+```
+
+```
+## [1] TRUE
+```
+
+```r
+df_metadata <-
+  left_join(livcan@meta.data, samples) %>% select(-sample_expt_str)
+```
+
+```
+## Joining, by = "cell_barcode"
+```
 
 # Preprocessing
 
@@ -186,12 +334,18 @@ head(livcan@meta.data, 5)
 ```
 
 ```
-##                    orig.ident nCount_RNA nFeature_RNA
-## AAACCTGAGGCGTACA-1          1       2235          909
-## AAACGGGAGATCGATA-1          1       3555         1266
-## AAAGCAAAGATCGGGT-1          1       7751         2495
-## AAATGCCGTCTCAACA-1          1       3168         1100
-## AACACGTCACGGCTAC-1          1       2040         1096
+##                    orig.ident nCount_RNA nFeature_RNA patient_id sample_id
+## AAACCTGAGGCGTACA-1          1       2235          909          2       H21
+## AAACGGGAGATCGATA-1          1       3555         1266          2       H21
+## AAAGCAAAGATCGGGT-1          1       7751         2495          2       H21
+## AAATGCCGTCTCAACA-1          1       3168         1100          2       H21
+## AACACGTCACGGCTAC-1          1       2040         1096          2       H21
+##                          cell_barcode
+## AAACCTGAGGCGTACA-1 AAACCTGAGGCGTACA-1
+## AAACGGGAGATCGATA-1 AAACGGGAGATCGATA-1
+## AAAGCAAAGATCGGGT-1 AAAGCAAAGATCGGGT-1
+## AAATGCCGTCTCAACA-1 AAATGCCGTCTCAACA-1
+## AACACGTCACGGCTAC-1 AACACGTCACGGCTAC-1
 ```
 
 ```r
@@ -201,12 +355,18 @@ head(livcan@meta.data, 5)
 ```
 
 ```
-##                    orig.ident nCount_RNA nFeature_RNA percent.mt
-## AAACCTGAGGCGTACA-1          1       2235          909   5.861298
-## AAACGGGAGATCGATA-1          1       3555         1266   3.769339
-## AAAGCAAAGATCGGGT-1          1       7751         2495   5.173526
-## AAATGCCGTCTCAACA-1          1       3168         1100   4.671717
-## AACACGTCACGGCTAC-1          1       2040         1096   1.813725
+##                    orig.ident nCount_RNA nFeature_RNA patient_id sample_id
+## AAACCTGAGGCGTACA-1          1       2235          909          2       H21
+## AAACGGGAGATCGATA-1          1       3555         1266          2       H21
+## AAAGCAAAGATCGGGT-1          1       7751         2495          2       H21
+## AAATGCCGTCTCAACA-1          1       3168         1100          2       H21
+## AACACGTCACGGCTAC-1          1       2040         1096          2       H21
+##                          cell_barcode percent.mt
+## AAACCTGAGGCGTACA-1 AAACCTGAGGCGTACA-1   5.861298
+## AAACGGGAGATCGATA-1 AAACGGGAGATCGATA-1   3.769339
+## AAAGCAAAGATCGGGT-1 AAAGCAAAGATCGGGT-1   5.173526
+## AAATGCCGTCTCAACA-1 AAATGCCGTCTCAACA-1   4.671717
+## AACACGTCACGGCTAC-1 AACACGTCACGGCTAC-1   1.813725
 ```
 
 ```r
@@ -218,7 +378,7 @@ VlnPlot(
 )
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-10-1.png)<!-- -->
+![](short_coding_exercise_files/figure-html/violin_plots_1-1.png)<!-- -->
 
 - nFeature_RNA is the number of genes detected in each cell
 - nCount_RNA is the total number of molecules (UMIs) detected within a cell
@@ -247,11 +407,21 @@ dim(livcan)
 ## [1] 20041  4749
 ```
 
+```r
+VlnPlot(
+  livcan,
+  features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
+  ncol = 3
+)
+```
+
+![](short_coding_exercise_files/figure-html/QC-1.png)<!-- -->
+
 "We found that additional filtering steps did not change an overall cellular composition among these samples."
 In our case, No. of cells passing the quality control dropped from 5115 to 4321!
 
-I added the nFeature_RNA cutoffs to take care of any empty droplets or doublets or multiplets. Also, instead of the standard `nFeature_RNA > 200 & nFeature_RNA < 2500`, I used only `nFeature_RNA < 2500` as we only have cells with at least 500 genes in them because of a previous filtration step.
-Even if I wouldn't have added the nFeature_RNA cutoffs, the no. of cells passing the quality control was ~4700.
+Initially, I added the nFeature_RNA cutoffs to take care of any empty droplets or doublets or multiplets. Also, instead of the standard `nFeature_RNA > 200 & nFeature_RNA < 2500`, I was using only `nFeature_RNA < 2500` as we only have cells with at least 500 genes in them because of a previous filtration step.
+Since, this step wasn't mentioned in the publication text, I later decided to not include this filter. Even if I would have added the nFeature_RNA cutoffs, the no. of cells passing the quality control was in 4000s.
 
 More on doublet detection and removal can be found on- 
 1. http://bioconductor.org/books/3.16/OSCA.advanced/doublet-detection.html
@@ -338,10 +508,10 @@ plot2 <- LabelPoints(plot = plot1,
 plot1 + plot2
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-13-1.png)<!-- -->
+![](short_coding_exercise_files/figure-html/find_hvgs-1.png)<!-- -->
 With the stringent cutoffs, only 1086 genes were classified as HVGs out of 5124, i.e., 4038 non-variable genes.
 
-So, maybe they've used only the cutoffs mentioned in their methods. After using only those cutoffs, I got 2240 HVGs compared to their 2244 HVGs.
+So, maybe they've used only the cutoffs mentioned in their methods. After using only those cutoffs, I got 2240 HVGs (out of 20041) compared to their 2244 HVGs.
 
 ## Scaling the data
 
@@ -463,27 +633,27 @@ print(livcan[["pca"]], dims = 1:5, nfeatures = 5)
 VizDimLoadings(livcan, dims = 1:2, reduction = "pca")
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-16-1.png)<!-- -->
+![](short_coding_exercise_files/figure-html/visualize_pca_data-1.png)<!-- -->
 
 ```r
 # Way3
 DimPlot(livcan, reduction = "pca")
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-16-2.png)<!-- -->
+![](short_coding_exercise_files/figure-html/visualize_pca_data-2.png)<!-- -->
 
 ```r
 # Way4
 DimHeatmap(livcan, dims = 1, cells = 500, balanced = TRUE)
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-16-3.png)<!-- -->
+![](short_coding_exercise_files/figure-html/visualize_pca_data-3.png)<!-- -->
 
 ```r
 DimHeatmap(livcan, dims = 1:20, cells = 500, balanced = TRUE)
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-16-4.png)<!-- -->
+![](short_coding_exercise_files/figure-html/visualize_pca_data-4.png)<!-- -->
 
 # Determining the "dimensionality" of the dataset
 
@@ -494,13 +664,13 @@ DimHeatmap(livcan, dims = 1:20, cells = 500, balanced = TRUE)
 ElbowPlot(livcan, ndims=20)
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-17-1.png)<!-- -->
+![](short_coding_exercise_files/figure-html/elbow_plot-1.png)<!-- -->
 
 ```r
 ElbowPlot(livcan, ndims=50)
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-17-2.png)<!-- -->
+![](short_coding_exercise_files/figure-html/elbow_plot-2.png)<!-- -->
 
 - From the Elbow plot with 20 dims, we can observe an ‘elbow’ around PC19-20, suggesting that the majority of true signal is captured in the first 20 PCs.
 - From the Elbow plot with 50 dims, we can observe an ‘elbow’ around PC44-45, suggesting that the majority of true signal is captured in the first 45 PCs.
@@ -520,7 +690,7 @@ JackStrawPlot(livcan, dims = 1:50)
 ## Warning: Removed 80817 rows containing missing values (`geom_point()`).
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-18-1.png)<!-- -->
+![](short_coding_exercise_files/figure-html/jackstraw_plot-1.png)<!-- -->
 
 - From the JackStraw plot with 50 dims, it appears that there is a sharp drop-off in significance after the first 45 PCs (same can be said about a sharp drop-off about after 19 PCs or 26 PCs).
 
@@ -573,57 +743,33 @@ head(Idents(livcan), 5)
 
 # Non-linear dimensional reduction
 
-The first 20 PCs were applied for t-SNE analysis according to the eigenvalues (data not shown).
+"The first 20 PCs were applied for t-SNE analysis according to the eigenvalues (data not shown)."
 
-The order is taken from Table 1 from <https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE125449> and PMID: 31588021:
-  GSM4050085	S16_P10_LCP18  Patient no.  1  H18
-  GSM4050086	S02_P01_LCP21  Patient no.  2  H21
-  GSM4050087	S10_P05_LCP23  Patient no.  3  H23
-  GSM4050088	S09_P04_LCP25  Patient no.  4  C25
-  GSM4050089	S08_P03_LCP26  Patient no.  5  C26
-  GSM4050090	S07_P02_LCP28  Patient no.  6  H28
-  GSM4050091	S11_P06_LCP29  Patient no.  7  C29
-  GSM4050092	S12_P07_LCP30  Patient no.  8  H30
-  GSM4050093	S20_P12_LCP35  Patient no.  9  C35
-  GSM4050094	S21_P13_LCP37  Patient no. 10  H37
-  GSM4050095	S15_P09_LCP38  Patient no. 11  H38
-  GSM4050096	S19_P11_LCP39  Patient no. 12  C39
+## Fig. 1B
 
 
 ```r
-livcan <- RunTSNE(livcan, dims = 1:20)
+livcan <- RunTSNE(livcan,
+                  dims = 1:20,
+                  perplexity = 50,
+                  theta = 0.3)
 DimPlot(
   livcan,
   reduction = "tsne",
   label = FALSE,
-  group.by = "orig.ident",
+  group.by = "sample_id",
   shuffle = TRUE,
-  seed = 100,
-  order = c(11, 9, 13, 12, 7, 6, 2, 3, 4, 5, 1, 10),
+  # seed = 100,
+  order = rev(v_sample_ids),
   # order = c(13, 12, 11, 10, 9, 7, 6, 5, 4, 3, 2, 1),
   # cols = DiscretePalette(12, palette = "alphabet2")
   cols = DiscretePalette(12, palette = "glasbey")
-)
+) + DarkTheme()
 ```
 
-![](short_coding_exercise_files/figure-html/unnamed-chunk-20-1.png)<!-- -->
+![](short_coding_exercise_files/figure-html/tsne-1.png)<!-- -->
 
 ```r
-# DimPlot(livcan, reduction = "tsne")
-
-
-# DimPlot(
-#   livcan,
-#   reduction = "tsne",
-#   label = FALSE,
-#   group.by = "ident",
-#   split.by = "orig.ident",
-#   ncol = 4,
-#   # order = c(11, 9, 13, 12, 7, 6, 2, 3, 4, 5, 1, 10),
-#   # combine = TRUE,
-#   cols = DiscretePalette(12, palette = "alphabet2")
-#   # cols = DiscretePalette(12)
-# )
 # # By default Seurat’s DimPlot() plots each group on top of the next which can make plots harder to interpret. DimPlot_scCustom sets shuffle = TRUE by default as I believe this setting is more often the visualization that provides the most clarity.
 # # https://samuel-marsh.github.io/scCustomize/articles/Gene_Expression_Plotting.html
 # DimPlot(seurat_object = marsh_human_pm, group.by = "sample_id")
@@ -632,57 +778,167 @@ DimPlot(
 
 
 ```r
-head(livcan@meta.data)
+# By original id
+DimPlot(
+  livcan,
+  reduction = "tsne",
+  label = FALSE,
+  group.by = "orig.ident",
+  shuffle = TRUE,
+  # seed = 100,
+  order = rev(v_orig_ident),
+  cols = DiscretePalette(12, palette = "glasbey")
+)
 ```
 
+![](short_coding_exercise_files/figure-html/more_tsne_visualizations-1.png)<!-- -->
+
+```r
+# By sample id
+DimPlot(
+  livcan,
+  reduction = "tsne",
+  label = FALSE,
+  group.by = "sample_id",
+  shuffle = TRUE,
+  seed = 100,
+  order = rev(v_sample_ids),
+  cols = DiscretePalette(12, palette = "glasbey")
+)
 ```
-##                    orig.ident nCount_RNA nFeature_RNA percent.mt
-## AAACCTGAGGCGTACA-1          1       2235          909   5.861298
-## AAACGGGAGATCGATA-1          1       3555         1266   3.769339
-## AAAGCAAAGATCGGGT-1          1       7751         2495   5.173526
-## AAATGCCGTCTCAACA-1          1       3168         1100   4.671717
-## AACACGTCACGGCTAC-1          1       2040         1096   1.813725
-## AACCGCGAGACGCTTT-1          1      10126         2864   2.696030
-##                    RNA_snn_res.0.325 seurat_clusters
-## AAACCTGAGGCGTACA-1                 2               2
-## AAACGGGAGATCGATA-1                 2               2
-## AAAGCAAAGATCGGGT-1                 2               2
-## AAATGCCGTCTCAACA-1                 2               2
-## AACACGTCACGGCTAC-1                 1               1
-## AACCGCGAGACGCTTT-1                 2               2
+
+![](short_coding_exercise_files/figure-html/more_tsne_visualizations-2.png)<!-- -->
+
+```r
+# By patient id
+DimPlot(
+  livcan,
+  reduction = "tsne",
+  label = FALSE,
+  group.by = "patient_id",
+  shuffle = TRUE,
+  # seed = 100,
+  order = rev(v_patient_ids),
+  cols = DiscretePalette(12, palette = "glasbey")
+)
 ```
 
-
-# R Markdown
-
-For Markdown setup options, see <https://bookdown.org/yihui/rmarkdown/html-document.html>. 
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+![](short_coding_exercise_files/figure-html/more_tsne_visualizations-3.png)<!-- -->
 
 
 ```r
-summary(cars)
+# saveRDS(livcan, file = "./livcan_set1_final.rds")
+```
+
+
+# Percentage composition of samples by cell types
+
+
+```r
+df_metadata <-
+  df_metadata[df_metadata$cell_barcode %in% rownames(livcan@meta.data),]
+
+# Vector of eight tumors with ≥ 20 malignant cells
+select_8tumors <-
+  c("C39", "H30", "C29", "H23", "H37", "C25", "C26", "H38")
+df_metadata_8tumor <-
+  df_metadata[df_metadata$sample_id %in% select_8tumors,]
+```
+
+
+Way 1: "dittoSeq" was an easy way given `cell_type` info was in our seurat obj's metadata col <https://bioconductor.org/packages/release/bioc/vignettes/dittoSeq/inst/doc/dittoSeq.html#74_dittoBarPlot__dittoFreqPlot>
+
+
+```r
+# dittoBarPlot(object = livcan,
+#              var = "sample_id",
+#              group.by = "cell_type")
+```
+
+Way 2: Manual calculations
+
+
+```r
+table(df_metadata_8tumor$cell_type)
 ```
 
 ```
-##      speed           dist       
-##  Min.   : 4.0   Min.   :  2.00  
-##  1st Qu.:12.0   1st Qu.: 26.00  
-##  Median :15.0   Median : 36.00  
-##  Mean   :15.4   Mean   : 42.98  
-##  3rd Qu.:19.0   3rd Qu.: 56.00  
-##  Max.   :25.0   Max.   :120.00
+## 
+##         B cell            CAF       HPC-like Malignant cell         T cell 
+##            570            396             79            538            995 
+##            TAM            TEC   unclassified 
+##            406            651             48
 ```
 
-# Including Plots
+```r
+# According to the text in the publication, we want to plot for only stromal cells
+table(df_metadata_8tumor[df_metadata_8tumor$cell_type == "B cell" |
+                           df_metadata_8tumor$cell_type == "T cell" |
+                           df_metadata_8tumor$cell_type == "CAF" |
+                           df_metadata_8tumor$cell_type == "TAM" |
+                           df_metadata_8tumor$cell_type == "TEC" , "cell_type"])
+```
 
-You can also embed plots, for example:
+```
+## 
+## B cell    CAF T cell    TAM    TEC 
+##    570    396    995    406    651
+```
 
-![](short_coding_exercise_files/figure-html/pressure-1.png)<!-- -->
+```r
+df_metadata_8tumor_stromal_cells_only <-
+  df_metadata_8tumor[df_metadata_8tumor$cell_type == "B cell" |
+                       df_metadata_8tumor$cell_type == "T cell" |
+                       df_metadata_8tumor$cell_type == "CAF" |
+                       df_metadata_8tumor$cell_type == "TAM" |
+                       df_metadata_8tumor$cell_type == "TEC" ,]
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+head(df_metadata_8tumor_stromal_cells_only)
+```
+
+```
+##     orig.ident nCount_RNA nFeature_RNA patient_id sample_id       cell_barcode
+## 829          3       2361         1267          5       C26 AAACCTGAGATAGCAT-3
+## 832          3       5883         1938          5       C26 AACTGGTAGCTAGCCC-3
+## 833          3       5765         1900          5       C26 AACTTTCAGGGTGTTG-3
+## 834          3       2962         1232          5       C26 AAGGTTCTCCACTCCA-3
+## 835          3       6748         2307          5       C26 ACACCAAAGCGTGAAC-3
+## 836          3      10575         2701          5       C26 ACACCAAAGTGGGTTG-3
+##     cell_type
+## 829       TEC
+## 832       TAM
+## 833       TAM
+## 834       TAM
+## 835       TAM
+## 836       CAF
+```
+
+## Fig. 2D
+
+
+```r
+df_metadata_8tumor_stromal_cells_only %>%
+  count(sample_id, cell_type) %>%
+  group_by(sample_id) %>%
+  mutate(pct = prop.table(n) * 100) %>%
+  ggplot() + aes(sample_id, pct, fill = factor(cell_type, levels = c("CAF", "T cell", "TEC", "TAM", "B cell"))) + # levels is providing order for the portions in the bar
+  geom_bar(stat = "identity") +
+  # ylab("Stromal composition (%)") +
+  # xlab("") +
+  # Ordering the bars in plot
+  scale_x_discrete(limits = select_8tumors) +
+  # Customizing the legend
+  scale_fill_discrete(name = "",
+                      labels = c("CAFs", "T cells", "TECs", "TAMs", "B cells")) +
+  # geom_text(aes(label = paste0(sprintf("%1.1f", pct), "%")),
+  #           position = position_stack(vjust = 0.5)) +
+  theme_fivethirtyeight() +
+  # axis.title is set to element_blank() in fivethirtyeight theme
+  theme(axis.title = element_text(), axis.title.x = element_blank()) + ylab("Stromal composition (%)")
+```
+
+![](short_coding_exercise_files/figure-html/stacked_barplot-1.png)<!-- -->
 
 
 # Session Information
@@ -709,9 +965,10 @@ sessionInfo(package=NULL)
 ## 
 ## other attached packages:
 ##  [1] patchwork_1.1.2     dplyr_1.0.10        SeuratObject_4.1.3 
-##  [4] Seurat_4.3.0        R.utils_2.12.2      R.oo_1.25.0        
-##  [7] R.methodsS3_1.8.2   GEOquery_2.66.0     Biobase_2.58.0     
-## [10] BiocGenerics_0.44.0
+##  [4] Seurat_4.3.0        ggthemes_4.2.4      ggplot2_3.4.0      
+##  [7] data.table_1.14.6   R.utils_2.12.2      R.oo_1.25.0        
+## [10] R.methodsS3_1.8.2   GEOquery_2.66.0     Biobase_2.58.0     
+## [13] BiocGenerics_0.44.0
 ## 
 ## loaded via a namespace (and not attached):
 ##   [1] ggbeeswarm_0.7.1       Rtsne_0.16             colorspace_2.0-3      
@@ -738,22 +995,21 @@ sessionInfo(package=NULL)
 ##  [64] scales_1.2.1           spatstat.utils_3.0-1   hms_1.1.2             
 ##  [67] promises_1.2.0.1       parallel_4.2.2         RColorBrewer_1.1-3    
 ##  [70] yaml_2.3.6             reticulate_1.26        pbapply_1.6-0         
-##  [73] gridExtra_2.3          ggrastr_1.0.1          ggplot2_3.4.0         
-##  [76] sass_0.4.4             stringi_1.7.8          highr_0.10            
-##  [79] rlang_1.0.6            pkgconfig_2.0.3        matrixStats_0.63.0    
-##  [82] evaluate_0.19          lattice_0.20-45        tensor_1.5            
-##  [85] ROCR_1.0-11            purrr_1.0.0            labeling_0.4.2        
-##  [88] htmlwidgets_1.6.0      cowplot_1.1.1          tidyselect_1.2.0      
-##  [91] parallelly_1.33.0      RcppAnnoy_0.0.20       plyr_1.8.8            
-##  [94] magrittr_2.0.3         R6_2.5.1               generics_0.1.3        
-##  [97] withr_2.5.0            pillar_1.8.1           fitdistrplus_1.1-8    
-## [100] abind_1.4-5            survival_3.4-0         sp_1.5-1              
-## [103] tibble_3.1.8           future.apply_1.10.0    crayon_1.5.2          
-## [106] KernSmooth_2.23-20     utf8_1.2.2             spatstat.geom_3.0-3   
-## [109] plotly_4.10.1          tzdb_0.3.0             rmarkdown_2.19        
-## [112] grid_4.2.2             data.table_1.14.6      digest_0.6.31         
-## [115] xtable_1.8-4           tidyr_1.2.1            httpuv_1.6.7          
-## [118] munsell_0.5.0          beeswarm_0.4.0         viridisLite_0.4.1     
-## [121] vipor_0.4.5            bslib_0.4.2
+##  [73] gridExtra_2.3          ggrastr_1.0.1          sass_0.4.4            
+##  [76] stringi_1.7.8          highr_0.10             rlang_1.0.6           
+##  [79] pkgconfig_2.0.3        matrixStats_0.63.0     evaluate_0.19         
+##  [82] lattice_0.20-45        tensor_1.5             ROCR_1.0-11           
+##  [85] purrr_1.0.0            labeling_0.4.2         htmlwidgets_1.6.0     
+##  [88] cowplot_1.1.1          tidyselect_1.2.0       parallelly_1.33.0     
+##  [91] RcppAnnoy_0.0.20       plyr_1.8.8             magrittr_2.0.3        
+##  [94] R6_2.5.1               generics_0.1.3         pillar_1.8.1          
+##  [97] withr_2.5.0            fitdistrplus_1.1-8     abind_1.4-5           
+## [100] survival_3.4-0         sp_1.5-1               tibble_3.1.8          
+## [103] future.apply_1.10.0    crayon_1.5.2           KernSmooth_2.23-20    
+## [106] utf8_1.2.2             spatstat.geom_3.0-3    plotly_4.10.1         
+## [109] tzdb_0.3.0             rmarkdown_2.19         grid_4.2.2            
+## [112] digest_0.6.31          xtable_1.8-4           tidyr_1.2.1           
+## [115] httpuv_1.6.7           munsell_0.5.0          beeswarm_0.4.0        
+## [118] viridisLite_0.4.1      vipor_0.4.5            bslib_0.4.2
 ```
 
