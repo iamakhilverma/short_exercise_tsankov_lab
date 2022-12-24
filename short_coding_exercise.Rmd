@@ -22,32 +22,37 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Installations
 
-```{r}
+```{r installations}
 # if (!require("BiocManager", quietly = TRUE))
-#     install.packages("BiocManager")
-#
+#   install.packages("BiocManager")
+# 
 # BiocManager::install("GEOquery")
-
+# BiocManager::install("dittoSeq")
+# 
 # install.packages(c("R.utils", "Seurat", "dplyr", "patchwork"))
 
 ```
 
 ## Loading
 
-```{r warning=FALSE, message=FALSE}
+```{r loading_libraries, warning=FALSE, message=FALSE}
 library(GEOquery)
 
 library(R.utils)
+library(data.table)
+library(ggplot2)
+library(ggthemes)
 
 library(Seurat)
 library(dplyr)
 library(patchwork)
 # library(scCustomize)
+# library(dittoSeq)
 ```
 
 # Data retrieval
 
-```{r}
+```{r set_working_directory}
 setwd("/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab")
 getwd()
 ```
@@ -61,16 +66,16 @@ A total of 19 tumors were profiled. Set 1 contains scRNA-seq data of twelve samp
 
 We care about the data contained in Set 1, i.e., `GSE125449-GPL18573_series_matrix.txt.gz`.
 
-```{r}
+```{r getGEO_unused}
 # gse <- getGEO('GSE125449',GSEMatrix=TRUE)
 # show(gse)
 ```
-```{r}
+```{r timeout_extension}
 options(timeout = max(300, getOption("timeout")))
 # options(download.file.method.GEOquery = "wget")
 ```
 
-```{r}
+```{r data_retrieval}
 if (!(
   file.exists(
     "/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/"
@@ -80,7 +85,7 @@ if (!(
   filePaths
 }
 ```
-```{r}
+```{r unzipper_function_declaration}
 unzipper <- function(filename) {
   gunzip(
     filename,
@@ -97,7 +102,7 @@ unzipper <- function(filename) {
 ```
 
 
-```{r}
+```{r data_extraction}
 if (!(
   file.exists(
     "/Users/iamakhilverma/Desktop/short_exercise_tsankov_lab/GSE125449/gse125449_set1"
@@ -115,7 +120,7 @@ if (!(
 The MTX format is a sparse matrix format with genes on the rows and cells on the columns as output by Cell Ranger. You should also have TSV files with genes and barcode sequences corresponding to row and column indices, respectively. These files must be located in the same folder as the MTX file with the same base file name. For example if the MTX file is my_data.mtx, you should also have a my_data.genes.txt file and a my_data.barcodes.txt file.
 
 
-```{r}
+```{r seurat_obj_creation}
 # Load the liver cancer set 1 dataset
 livcan.data <- Read10X(data.dir = "./GSE125449/gse125449_set1/")
 dim(livcan.data)
@@ -133,8 +138,79 @@ livcan <-
 dim(livcan)
 # head(livcan.data)
 ```
+
+
 "A total of 5,115 cells passed the initial quality control."
 Indeed.
+
+
+The order is taken from Table 1 from <https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE125449> and PMID: 31588021:
+  GSM4050085	S16_P10_LCP18  Patient no.  1  H18
+  GSM4050086	S02_P01_LCP21  Patient no.  2  H21
+  GSM4050087	S10_P05_LCP23  Patient no.  3  H23
+  GSM4050088	S09_P04_LCP25  Patient no.  4  C25
+  GSM4050089	S08_P03_LCP26  Patient no.  5  C26
+  GSM4050090	S07_P02_LCP28  Patient no.  6  H28
+  GSM4050091	S11_P06_LCP29  Patient no.  7  C29
+  GSM4050092	S12_P07_LCP30  Patient no.  8  H30
+  GSM4050093	S20_P12_LCP35  Patient no.  9  C35
+  GSM4050094	S21_P13_LCP37  Patient no. 10  H37
+  GSM4050095	S15_P09_LCP38  Patient no. 11  H38
+  GSM4050096	S19_P11_LCP39  Patient no. 12  C39
+
+```{r add_info_1}
+v_orig_ident <- c(10, 1, 5, 4, 3, 2, 6, 7, 12, 13, 9, 11)
+v_patient_ids <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+v_sample_ids <-
+  c("H18",
+    "H21",
+    "H23",
+    "C25",
+    "C26",
+    "H28",
+    "C29",
+    "H30",
+    "C35",
+    "H37",
+    "H38",
+    "C39")
+```
+
+```{r add_meta_data}
+head(livcan@meta.data)
+
+livcan$patient_id <- NA
+livcan$sample_id <- NA
+head(livcan$sample_id)
+
+
+for (i in seq.int(1, 12)) {
+  livcan$patient_id[livcan$orig.ident == v_orig_ident[i]] <-
+    v_patient_ids[i]
+  livcan$sample_id[livcan$orig.ident == v_orig_ident[i]] <-
+    v_sample_ids[i]
+}
+
+head(livcan@meta.data)
+head(livcan)
+```
+
+```{r df_create}
+samples <-
+  read.table(
+    "./GSE125449/gse125449_set1/samples.txt",
+    header = TRUE,
+    sep = "\t",
+    col.names = c("sample_expt_str", "cell_barcode", "cell_type")
+  )
+head(samples)
+
+livcan$cell_barcode <- rownames(livcan@meta.data)
+all(livcan$cell_barcode == samples$cell_barcode)
+
+df_metadata <-
+  left_join(livcan@meta.data, samples) %>% select(-sample_expt_str)
+```
 
 # Preprocessing
 
@@ -147,7 +223,7 @@ Mitochondrial genes starts with prefix “MT-”.
 
 NOTE: The pattern provided (“^MT-“) works for human gene names. You may need to adjust depending on your organism of interest. If you weren’t using gene names as the gene ID, then this function wouldn’t work. 
 
-```{r}
+```{r violin_plots_1}
 # Show QC metrics for the first 5 cells
 head(livcan@meta.data, 5)
 livcan[["percent.mt"]] <-
@@ -168,7 +244,7 @@ VlnPlot(
 
 Low nFeature_RNA for a cell indicates that it may be dead/dying or an empty droplet. High nCount_RNA and/or nFeature_RNA indicates that the "cell" may in fact be a doublet (or multiplet).
 
-```{r}
+```{r QC}
 dim(livcan)
 # livcan <- subset(livcan, subset = nCount_RNA > 700 & percent.mt < 20)
 livcan <- subset(livcan,
@@ -176,13 +252,19 @@ livcan <- subset(livcan,
                    # (nFeature_RNA < 2500) &
                    (percent.mt < 20))
 dim(livcan)
+
+VlnPlot(
+  livcan,
+  features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
+  ncol = 3
+)
 ```
 
 "We found that additional filtering steps did not change an overall cellular composition among these samples."
 In our case, No. of cells passing the quality control dropped from 5115 to 4321!
 
-I added the nFeature_RNA cutoffs to take care of any empty droplets or doublets or multiplets. Also, instead of the standard `nFeature_RNA > 200 & nFeature_RNA < 2500`, I used only `nFeature_RNA < 2500` as we only have cells with at least 500 genes in them because of a previous filtration step.
-Even if I wouldn't have added the nFeature_RNA cutoffs, the no. of cells passing the quality control was ~4700.
+Initially, I added the nFeature_RNA cutoffs to take care of any empty droplets or doublets or multiplets. Also, instead of the standard `nFeature_RNA > 200 & nFeature_RNA < 2500`, I was using only `nFeature_RNA < 2500` as we only have cells with at least 500 genes in them because of a previous filtration step.
+Since, this step wasn't mentioned in the publication text, I later decided to not include this filter. Even if I would have added the nFeature_RNA cutoffs, the no. of cells passing the quality control was in 4000s.
 
 More on doublet detection and removal can be found on- 
 1. http://bioconductor.org/books/3.16/OSCA.advanced/doublet-detection.html
@@ -195,7 +277,7 @@ More on doublet detection and removal can be found on-
 
 This step is just using the default scaling factor of 10,000 in the "LogNormalize" global-scaling normalization method.
 
-```{r}
+```{r normalization}
 dim(livcan)
 livcan <-
   NormalizeData(livcan,
@@ -214,7 +296,7 @@ We next calculate a subset of features that exhibit high cell-to-cell variation 
 
 More on FindVariableFeatures()- https://satijalab.org/seurat/reference/findvariablefeatures
 
-```{r}
+```{r find_hvgs}
 dim(livcan)
 
 livcan <- FindVariableFeatures(
@@ -238,7 +320,7 @@ plot1 + plot2
 ```
 With the stringent cutoffs, only 1086 genes were classified as HVGs out of 5124, i.e., 4038 non-variable genes.
 
-So, maybe they've used only the cutoffs mentioned in their methods. After using only those cutoffs, I got 2240 HVGs compared to their 2244 HVGs.
+So, maybe they've used only the cutoffs mentioned in their methods. After using only those cutoffs, I got 2240 HVGs (out of 20041) compared to their 2244 HVGs.
 
 ## Scaling the data
 
@@ -248,7 +330,7 @@ Setting center to TRUE will center the expression for each feature by subtractin
 
 More on ScaleData()- https://satijalab.org/seurat/reference/scaledata
 
-```{r}
+```{r scaling}
 all.genes <- rownames(livcan)
 
 livcan <-
@@ -267,7 +349,7 @@ livcan <-
 
 Now to perform PCA on the scaled data- By default, only the previously determined variable features are used as input, but can be defined using features argument if we wish to choose a different subset.
 
-```{r}
+```{r pca}
 length(VariableFeatures(object = livcan))
 livcan <-
   RunPCA(livcan, features = VariableFeatures(object = livcan))
@@ -277,7 +359,7 @@ livcan <-
 
 Some different ways to visualize cells and features that define the PCA-
 
-```{r}
+```{r visualize_pca_data}
 # Way 1
 print(livcan[["pca"]], dims = 1:5, nfeatures = 5)
 
@@ -296,7 +378,7 @@ DimHeatmap(livcan, dims = 1:20, cells = 500, balanced = TRUE)
 
 ‘Elbow plot’: a ranking of principle components based on the percentage of variance explained by each one (ElbowPlot() function). 
 
-```{r}
+```{r elbow_plot}
 ElbowPlot(livcan, ndims=20)
 ElbowPlot(livcan, ndims=50)
 ```
@@ -307,7 +389,7 @@ ElbowPlot(livcan, ndims=50)
 
 An alternate approach would be to use JackStrawPlot().
 
-```{r}
+```{r jackstraw_plot}
 livcan <- JackStraw(livcan, num.replicate = 100, dims = 50, verbose = TRUE)
 livcan <- ScoreJackStraw(livcan, dims = 1:50)
 
@@ -320,7 +402,7 @@ JackStrawPlot(livcan, dims = 1:50)
 
 Seurat uses a graph-based technique to cluster cells based on their gene expression profiles.
 
-```{r}
+```{r clustering}
 livcan <- FindNeighbors(livcan, dims = 1:20)
 livcan <- FindClusters(livcan, resolution = 0.325)
 
@@ -331,88 +413,149 @@ head(Idents(livcan), 5)
 
 # Non-linear dimensional reduction
 
-The first 20 PCs were applied for t-SNE analysis according to the eigenvalues (data not shown).
+"The first 20 PCs were applied for t-SNE analysis according to the eigenvalues (data not shown)."
 
-The order is taken from Table 1 from <https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE125449> and PMID: 31588021:
-  GSM4050085	S16_P10_LCP18  Patient no.  1  H18
-  GSM4050086	S02_P01_LCP21  Patient no.  2  H21
-  GSM4050087	S10_P05_LCP23  Patient no.  3  H23
-  GSM4050088	S09_P04_LCP25  Patient no.  4  C25
-  GSM4050089	S08_P03_LCP26  Patient no.  5  C26
-  GSM4050090	S07_P02_LCP28  Patient no.  6  H28
-  GSM4050091	S11_P06_LCP29  Patient no.  7  C29
-  GSM4050092	S12_P07_LCP30  Patient no.  8  H30
-  GSM4050093	S20_P12_LCP35  Patient no.  9  C35
-  GSM4050094	S21_P13_LCP37  Patient no. 10  H37
-  GSM4050095	S15_P09_LCP38  Patient no. 11  H38
-  GSM4050096	S19_P11_LCP39  Patient no. 12  C39
+## Fig. 1B
 
-```{r}
-livcan <- RunTSNE(livcan, dims = 1:20)
+```{r tsne}
+livcan <- RunTSNE(livcan,
+                  dims = 1:20,
+                  perplexity = 50,
+                  theta = 0.3)
 DimPlot(
   livcan,
   reduction = "tsne",
   label = FALSE,
-  group.by = "orig.ident",
+  group.by = "sample_id",
   shuffle = TRUE,
-  seed = 100,
-  order = c(11, 9, 13, 12, 7, 6, 2, 3, 4, 5, 1, 10),
+  # seed = 100,
+  order = rev(v_sample_ids),
   # order = c(13, 12, 11, 10, 9, 7, 6, 5, 4, 3, 2, 1),
   # cols = DiscretePalette(12, palette = "alphabet2")
   cols = DiscretePalette(12, palette = "glasbey")
-)
-# DimPlot(livcan, reduction = "tsne")
+) + DarkTheme()
 
-
-# DimPlot(
-#   livcan,
-#   reduction = "tsne",
-#   label = FALSE,
-#   group.by = "ident",
-#   split.by = "orig.ident",
-#   ncol = 4,
-#   # order = c(11, 9, 13, 12, 7, 6, 2, 3, 4, 5, 1, 10),
-#   # combine = TRUE,
-#   cols = DiscretePalette(12, palette = "alphabet2")
-#   # cols = DiscretePalette(12)
-# )
 # # By default Seurat’s DimPlot() plots each group on top of the next which can make plots harder to interpret. DimPlot_scCustom sets shuffle = TRUE by default as I believe this setting is more often the visualization that provides the most clarity.
 # # https://samuel-marsh.github.io/scCustomize/articles/Gene_Expression_Plotting.html
 # DimPlot(seurat_object = marsh_human_pm, group.by = "sample_id")
 # DimPlot_scCustom(seurat_object = livcan, group.by = "orig.ident")
 ```
 
-```{r}
-head(livcan@meta.data)
+```{r more_tsne_visualizations}
+# By original id
+DimPlot(
+  livcan,
+  reduction = "tsne",
+  label = FALSE,
+  group.by = "orig.ident",
+  shuffle = TRUE,
+  # seed = 100,
+  order = rev(v_orig_ident),
+  cols = DiscretePalette(12, palette = "glasbey")
+)
+
+# By sample id
+DimPlot(
+  livcan,
+  reduction = "tsne",
+  label = FALSE,
+  group.by = "sample_id",
+  shuffle = TRUE,
+  seed = 100,
+  order = rev(v_sample_ids),
+  cols = DiscretePalette(12, palette = "glasbey")
+)
+
+# By patient id
+DimPlot(
+  livcan,
+  reduction = "tsne",
+  label = FALSE,
+  group.by = "patient_id",
+  shuffle = TRUE,
+  # seed = 100,
+  order = rev(v_patient_ids),
+  cols = DiscretePalette(12, palette = "glasbey")
+)
+```
+
+```{r saveRDS}
+# saveRDS(livcan, file = "./livcan_set1_final.rds")
 ```
 
 
-# R Markdown
+# Percentage composition of samples by cell types
 
-For Markdown setup options, see <https://bookdown.org/yihui/rmarkdown/html-document.html>. 
+```{r select_8_tumors}
+df_metadata <-
+  df_metadata[df_metadata$cell_barcode %in% rownames(livcan@meta.data),]
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+# Vector of eight tumors with ≥ 20 malignant cells
+select_8tumors <-
+  c("C39", "H30", "C29", "H23", "H37", "C25", "C26", "H38")
+df_metadata_8tumor <-
+  df_metadata[df_metadata$sample_id %in% select_8tumors,]
 ```
 
-# Including Plots
 
-You can also embed plots, for example:
+Way 1: "dittoSeq" was an easy way given `cell_type` info was in our seurat obj's metadata col <https://bioconductor.org/packages/release/bioc/vignettes/dittoSeq/inst/doc/dittoSeq.html#74_dittoBarPlot__dittoFreqPlot>
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r dittoSeq}
+# dittoBarPlot(object = livcan,
+#              var = "sample_id",
+#              group.by = "cell_type")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Way 2: Manual calculations
+
+```{r stromal_cell_subsetting}
+table(df_metadata_8tumor$cell_type)
+
+# According to the text in the publication, we want to plot for only stromal cells
+table(df_metadata_8tumor[df_metadata_8tumor$cell_type == "B cell" |
+                           df_metadata_8tumor$cell_type == "T cell" |
+                           df_metadata_8tumor$cell_type == "CAF" |
+                           df_metadata_8tumor$cell_type == "TAM" |
+                           df_metadata_8tumor$cell_type == "TEC" , "cell_type"])
+
+df_metadata_8tumor_stromal_cells_only <-
+  df_metadata_8tumor[df_metadata_8tumor$cell_type == "B cell" |
+                       df_metadata_8tumor$cell_type == "T cell" |
+                       df_metadata_8tumor$cell_type == "CAF" |
+                       df_metadata_8tumor$cell_type == "TAM" |
+                       df_metadata_8tumor$cell_type == "TEC" ,]
+
+
+head(df_metadata_8tumor_stromal_cells_only)
+```
+
+## Fig. 2D
+
+```{r stacked_barplot}
+df_metadata_8tumor_stromal_cells_only %>%
+  count(sample_id, cell_type) %>%
+  group_by(sample_id) %>%
+  mutate(pct = prop.table(n) * 100) %>%
+  ggplot() + aes(sample_id, pct, fill = factor(cell_type, levels = c("CAF", "T cell", "TEC", "TAM", "B cell"))) + # levels is providing order for the portions in the bar
+  geom_bar(stat = "identity") +
+  # ylab("Stromal composition (%)") +
+  # xlab("") +
+  # Ordering the bars in plot
+  scale_x_discrete(limits = select_8tumors) +
+  # Customizing the legend
+  scale_fill_discrete(name = "",
+                      labels = c("CAFs", "T cells", "TECs", "TAMs", "B cells")) +
+  # geom_text(aes(label = paste0(sprintf("%1.1f", pct), "%")),
+  #           position = position_stack(vjust = 0.5)) +
+  theme_fivethirtyeight() +
+  # axis.title is set to element_blank() in fivethirtyeight theme
+  theme(axis.title = element_text(), axis.title.x = element_blank()) + ylab("Stromal composition (%)")
+```
 
 
 # Session Information
 
-```{r}
+```{r session_info}
 sessionInfo(package=NULL)
 ```
 
